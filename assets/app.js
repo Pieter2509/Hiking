@@ -3,25 +3,87 @@ const DATA_URL = "data/activities.geojson";
 const fmt = new Intl.NumberFormat("nl-NL");
 const fmt1 = new Intl.NumberFormat("nl-NL", { maximumFractionDigits: 1, minimumFractionDigits: 1 });
 
+const ICON_ROUTE =
+  '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19c3-1 4-4 4-7s2-6 5-6 4 3 4 6 2 6 5 6"/><circle cx="4" cy="19" r="1.4" fill="currentColor" stroke="none"/><circle cx="20" cy="18" r="1.4" fill="currentColor" stroke="none"/></svg>';
+
+const ICON_ELEVATION =
+  '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 19l5.5-9 3.5 5 3-4 6 8H3z"/></svg>';
+
+const NORMAL_STYLE = { color: "#FFC736", weight: 3.5 };
+const ACTIVE_STYLE = { color: "#3ddc59", weight: 6 };
+
+// Pas deze twee punten aan om een andere virtuele tocht te tekenen.
+const JOURNEY = {
+  startName: "Stein, Limburg",
+  startLat: 50.9667,
+  startLon: 5.7667,
+  endName: "Boedapest, Hongarije",
+  endLat: 47.4979,
+  endLon: 19.0402,
+};
+
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  const c = 2 * Math.asin(Math.min(1, Math.sqrt(a)));
+  return R * c;
+}
+
+function renderJourney(features) {
+  const journeyKm = haversineKm(JOURNEY.startLat, JOURNEY.startLon, JOURNEY.endLat, JOURNEY.endLon);
+  const totalKm = features.reduce((s, f) => s + (f.properties.distance_m || 0), 0) / 1000;
+
+  const laps = Math.floor(totalKm / journeyKm);
+  const remainderKm = totalKm - laps * journeyKm;
+  const percent = journeyKm > 0 ? Math.min(100, (remainderKm / journeyKm) * 100) : 0;
+  const toGoKm = Math.max(0, journeyKm - remainderKm);
+
+  document.getElementById("journey-fill").style.width = `${percent}%`;
+  document.getElementById("journey-walker").style.left = `${percent}%`;
+  document.querySelector(".journey-start").textContent = JOURNEY.startName;
+  document.querySelector(".journey-end").textContent = JOURNEY.endName;
+
+  const lapsText = laps > 0
+    ? `Je hebt deze route al <strong>${laps}×</strong> volgelopen, en zit nu op `
+    : "Je zit op ";
+
+  document.getElementById("journey-caption").innerHTML =
+    `${lapsText}<strong>${fmt1.format(remainderKm)} km</strong> van de ${fmt1.format(journeyKm)} km ` +
+    `tussen ${JOURNEY.startName} en ${JOURNEY.endName} — nog <strong>${fmt1.format(toGoKm)} km</strong> te gaan.`;
+}
+
 function km(meters) { return meters / 1000; }
 
+// Meerdere tochten op dezelfde dag tellen samen (bijv. ochtend- en avondwandeling).
+// De datum komt uit Strava's lokale tijd, dus dit weekt netjes per kalenderdag.
+function computeDayTotals(features) {
+  const dayTotals = new Map();
+  for (const f of features) {
+    if (!f.properties.date) continue;
+    const key = new Date(f.properties.date).toISOString().slice(0, 10);
+    dayTotals.set(key, (dayTotals.get(key) || 0) + (f.properties.distance_m || 0));
+  }
+  return dayTotals;
+}
+
 function initMap() {
-  const map = L.map("map", { scrollWheelZoom: false, worldCopyJump: true }).setView([20, 10], 2);
+  const map = L.map("map", { scrollWheelZoom: true, worldCopyJump: true }).setView([20, 10], 2);
   L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
     attribution: '&copy; OpenStreetMap &copy; CARTO',
     maxZoom: 19,
+    crossOrigin: true,
   }).addTo(map);
   return map;
 }
 
 // Alle bewandelde paden krijgen dezelfde "opgelicht asfalt"-stijl.
 function styleForFeature() {
-  return {
-    color: "#FFC736",
-    weight: 3.5,
-    opacity: 0.95,
-    className: "walked-route",
-  };
+  return { ...NORMAL_STYLE, opacity: 0.95, className: "walked-route" };
 }
 
 function renderStats(features) {
@@ -40,6 +102,36 @@ function renderStats(features) {
     if (!longest || (f.properties.distance_m || 0) > (longest.properties.distance_m || 0)) longest = f;
   }
 
+  const dayTotals = computeDayTotals(features);
+  let bestDayKey = null;
+  let bestDayDistanceM = 0;
+  for (const [key, distanceM] of dayTotals) {
+    if (distanceM > bestDayDistanceM) {
+      bestDayDistanceM = distanceM;
+      bestDayKey = key;
+    }
+  }
+
+  // Snelheid: gewogen gemiddelde (totale afstand / totale beweegtijd) is
+  // representatiever dan het gemiddelde van losse tocht-snelheden.
+  let movingDistanceM = 0;
+  let movingTimeS = 0;
+  let fastest = null;
+  let fastestKmh = 0;
+  for (const f of features) {
+    const d = f.properties.distance_m || 0;
+    const t = f.properties.moving_time_s || 0;
+    if (d <= 0 || t <= 0) continue;
+    movingDistanceM += d;
+    movingTimeS += t;
+    const kmh = (d / t) * 3.6;
+    if (kmh > fastestKmh) {
+      fastestKmh = kmh;
+      fastest = f;
+    }
+  }
+  const avgKmh = movingTimeS > 0 ? (movingDistanceM / movingTimeS) * 3.6 : 0;
+
   document.getElementById("stat-total-distance").textContent = fmt.format(Math.round(km(totalDistanceM)));
   document.getElementById("stat-total-walks").textContent = fmt.format(count);
   document.getElementById("stat-total-countries").textContent = fmt.format(countries.size);
@@ -53,51 +145,287 @@ function renderStats(features) {
     document.getElementById("card-longest-name").textContent = longest.properties.name || "—";
   }
 
+  if (bestDayKey) {
+    document.getElementById("card-daymax").textContent = fmt1.format(km(bestDayDistanceM)) + " km";
+    document.getElementById("card-daymax-date").textContent = new Date(bestDayKey + "T00:00:00Z")
+      .toLocaleDateString("nl-NL", { day: "2-digit", month: "short", year: "numeric" });
+  }
+
   document.getElementById("card-countries").textContent = fmt.format(countries.size);
   document.getElementById("card-countries-list").textContent = [...countries].slice(0, 4).join(", ") || "—";
 
   document.getElementById("card-year").textContent = fmt1.format(km(thisYearDistanceM));
   document.getElementById("card-year-label").textContent = currentYear;
+
+  document.getElementById("card-speed-avg").textContent = avgKmh > 0 ? fmt1.format(avgKmh) : "–";
+
+  if (fastest) {
+    document.getElementById("card-speed-max").textContent = fmt1.format(fastestKmh) + " km/u";
+    document.getElementById("card-speed-max-name").textContent = fastest.properties.name || "—";
+  }
 }
 
-function renderList(features, map, layerByFeature) {
-  const list = document.getElementById("walk-list");
+const HEATMAP_WEEKS = 53;
+const MONTH_NAMES_SHORT = ["jan", "feb", "mrt", "apr", "mei", "jun", "jul", "aug", "sep", "okt", "nov", "dec"];
+
+function buildHeatmapWeeks(numWeeks) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const daysSinceMonday = (today.getDay() + 6) % 7; // maandag = 0
+  const thisWeekSunday = new Date(today);
+  thisWeekSunday.setDate(today.getDate() + (6 - daysSinceMonday));
+
+  const start = new Date(thisWeekSunday);
+  start.setDate(start.getDate() - (numWeeks * 7 - 1));
+
+  const weeks = [];
+  const cursor = new Date(start);
+  for (let w = 0; w < numWeeks; w++) {
+    const week = [];
+    for (let d = 0; d < 7; d++) {
+      week.push(new Date(cursor));
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    weeks.push(week);
+  }
+  return weeks;
+}
+
+function heatLevel(distanceM, maxDistanceM) {
+  if (!distanceM || maxDistanceM <= 0) return 0;
+  const ratio = distanceM / maxDistanceM;
+  if (ratio > 0.75) return 4;
+  if (ratio > 0.5) return 3;
+  if (ratio > 0.25) return 2;
+  return 1;
+}
+
+function renderHeatmap(features) {
+  const dayTotals = computeDayTotals(features);
+  const maxDistanceM = Math.max(0, ...dayTotals.values());
+  const weeks = buildHeatmapWeeks(HEATMAP_WEEKS);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const grid = document.getElementById("heatmap-grid");
+  const monthsRow = document.getElementById("heatmap-months");
+  grid.innerHTML = "";
+  monthsRow.innerHTML = "";
+  grid.style.gridTemplateColumns = `repeat(${weeks.length}, 11px)`;
+  monthsRow.style.gridTemplateColumns = `repeat(${weeks.length}, 11px)`;
+
+  let lastMonth = -1;
+  weeks.forEach((week) => {
+    const firstOfMonthDay = week.find((d) => d.getDate() === 1) || week[0];
+    const monthLabel = document.createElement("span");
+    if (firstOfMonthDay.getMonth() !== lastMonth && week.some((d) => d.getDate() <= 7)) {
+      monthLabel.textContent = MONTH_NAMES_SHORT[firstOfMonthDay.getMonth()];
+      lastMonth = firstOfMonthDay.getMonth();
+    }
+    monthsRow.appendChild(monthLabel);
+  });
+
+  for (let d = 0; d < 7; d++) {
+    for (const week of weeks) {
+      const date = week[d];
+      const cell = document.createElement("span");
+      cell.className = "heat-cell";
+      if (date > today) {
+        cell.classList.add("heat-future");
+      } else {
+        const key = date.toISOString().slice(0, 10);
+        const distanceM = dayTotals.get(key) || 0;
+        const level = heatLevel(distanceM, maxDistanceM);
+        cell.classList.add(`level-${level}`);
+        const dateLabel = date.toLocaleDateString("nl-NL", { day: "2-digit", month: "short", year: "numeric" });
+        cell.title = distanceM > 0
+          ? `${dateLabel}: ${fmt1.format(km(distanceM))} km`
+          : `${dateLabel}: geen wandeling`;
+      }
+      grid.appendChild(cell);
+    }
+  }
+}
+
+const RECORD_ICONS = {
+  distance: ICON_ROUTE,
+  elevation: ICON_ELEVATION,
+  day:
+    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',
+};
+
+function computeRecordsTimeline(features) {
+  const sorted = [...features]
+    .filter((f) => f.properties.date)
+    .sort((a, b) => new Date(a.properties.date) - new Date(b.properties.date));
+
+  const records = [];
+  let bestDistanceM = 0;
+  let bestElevationM = 0;
+  let bestDayM = 0;
+  const dayTotals = new Map();
+
+  for (const f of sorted) {
+    const p = f.properties;
+    const distanceM = p.distance_m || 0;
+    const elevationM = p.elevation_gain_m || 0;
+    const dayKey = new Date(p.date).toISOString().slice(0, 10);
+    const newDayTotalM = (dayTotals.get(dayKey) || 0) + distanceM;
+    dayTotals.set(dayKey, newDayTotalM);
+
+    if (distanceM > bestDistanceM) {
+      bestDistanceM = distanceM;
+      records.push({
+        date: p.date,
+        type: "distance",
+        text: `Langste wandeling: <strong>${fmt1.format(km(distanceM))} km</strong>${p.name ? ` — ${p.name}` : ""}`,
+      });
+    }
+    if (elevationM > bestElevationM) {
+      bestElevationM = elevationM;
+      records.push({
+        date: p.date,
+        type: "elevation",
+        text: `Meeste hoogtemeters in één tocht: <strong>${fmt.format(Math.round(elevationM))} m</strong>${p.name ? ` — ${p.name}` : ""}`,
+      });
+    }
+    if (newDayTotalM > bestDayM) {
+      bestDayM = newDayTotalM;
+      records.push({
+        date: p.date,
+        type: "day",
+        text: `Meeste kilometers op één dag: <strong>${fmt1.format(km(newDayTotalM))} km</strong>`,
+      });
+    }
+  }
+
+  return records.reverse(); // meest recente record eerst
+}
+
+function renderRecords(features) {
+  const records = computeRecordsTimeline(features);
+  const list = document.getElementById("records-list");
   list.innerHTML = "";
 
-  const sorted = [...features].sort((a, b) => {
-    const da = a.properties.date ? new Date(a.properties.date) : 0;
-    const db = b.properties.date ? new Date(b.properties.date) : 0;
-    return db - da;
-  });
+  if (records.length === 0) {
+    list.innerHTML = '<li class="record-empty">Nog geen records — je eerste wandeling telt al als startpunt.</li>';
+    return;
+  }
+
+  for (const r of records) {
+    const li = document.createElement("li");
+    li.className = "record-item";
+    const dateLabel = new Date(r.date).toLocaleDateString("nl-NL", { day: "2-digit", month: "short", year: "numeric" });
+    li.innerHTML = `
+      <span class="record-icon">${RECORD_ICONS[r.type]}</span>
+      <span class="record-text">${r.text}</span>
+      <span class="record-date">${dateLabel}</span>
+    `;
+    list.appendChild(li);
+  }
+}
+
+const SORTERS = {
+  "date-desc": (a, b) => dateValue(b) - dateValue(a),
+  "date-asc": (a, b) => dateValue(a) - dateValue(b),
+  "distance-desc": (a, b) => (b.properties.distance_m || 0) - (a.properties.distance_m || 0),
+  "distance-asc": (a, b) => (a.properties.distance_m || 0) - (b.properties.distance_m || 0),
+  "elevation-desc": (a, b) => (b.properties.elevation_gain_m || 0) - (a.properties.elevation_gain_m || 0),
+  "elevation-asc": (a, b) => (a.properties.elevation_gain_m || 0) - (b.properties.elevation_gain_m || 0),
+};
+
+function dateValue(feature) {
+  return feature.properties.date ? new Date(feature.properties.date).getTime() : 0;
+}
+
+function renderList(features, listItemByFeature, onSelect, sortKey, activeFeature) {
+  const list = document.getElementById("walk-list");
+  list.innerHTML = "";
+  listItemByFeature.clear();
+
+  const sorter = SORTERS[sortKey] || SORTERS["date-desc"];
+  const sorted = [...features].sort(sorter);
 
   for (const f of sorted) {
     const li = document.createElement("li");
     li.className = "walk-item";
     li.tabIndex = 0;
 
-    const dateStr = f.properties.date
-      ? new Date(f.properties.date).toLocaleDateString("nl-NL", { year: "numeric", month: "short", day: "2-digit" })
-      : "—";
+    const date = f.properties.date ? new Date(f.properties.date) : null;
+    const day = date ? date.getDate() : "–";
+    const month = date ? date.toLocaleDateString("nl-NL", { month: "short" }).replace(".", "") : "";
 
     li.innerHTML = `
-      <span class="walk-date">${dateStr}</span>
-      <span class="walk-name">${f.properties.name || "Naamloze wandeling"}${f.properties.country ? ` · ${f.properties.country}` : ""}</span>
-      <span class="walk-metrics">${fmt1.format(km(f.properties.distance_m || 0))} km &nbsp;·&nbsp; +${fmt.format(Math.round(f.properties.elevation_gain_m || 0))} m</span>
+      <div class="walk-date-badge">
+        <span class="day">${day}</span>
+        <span class="month">${month}</span>
+      </div>
+      <div class="walk-main">
+        <span class="walk-name">${f.properties.name || "Naamloze wandeling"}</span>
+        <span class="walk-meta">${f.properties.country || "onbekend land"}</span>
+      </div>
+      <div class="walk-metrics">
+        <span class="metric">${ICON_ROUTE}${fmt1.format(km(f.properties.distance_m || 0))} km</span>
+        <span class="metric">${ICON_ELEVATION}+${fmt.format(Math.round(f.properties.elevation_gain_m || 0))} m</span>
+      </div>
     `;
 
-    const focusRoute = () => {
-      const layer = layerByFeature.get(f);
-      if (layer) {
-        map.fitBounds(layer.getBounds(), { maxZoom: 13 });
-        layer.setStyle({ weight: 7 });
-        setTimeout(() => layer.setStyle({ weight: 3.5 }), 1200);
-      }
-    };
+    listItemByFeature.set(f, li);
+    if (f === activeFeature) li.classList.add("walk-item-active");
 
-    li.addEventListener("click", focusRoute);
-    li.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") focusRoute(); });
+    const activate = () => onSelect(f, { fit: true });
+    li.addEventListener("click", activate);
+    li.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); activate(); } });
 
     list.appendChild(li);
+  }
+}
+
+function showSnapshotToast(message) {
+  const toast = document.getElementById("snapshot-toast");
+  toast.textContent = message;
+  toast.classList.add("visible");
+  clearTimeout(showSnapshotToast._t);
+  showSnapshotToast._t = setTimeout(() => toast.classList.remove("visible"), 4000);
+}
+
+async function shareMapSnapshot() {
+  const mapEl = document.getElementById("map");
+  const btn = document.getElementById("snapshot-btn");
+  const originalLabel = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Bezig…";
+
+  try {
+    const canvas = await html2canvas(mapEl, { useCORS: true, logging: false });
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+    if (!blob) throw new Error("kon geen afbeelding maken");
+
+    const file = new File([blob], "wandelkaart.png", { type: "image/png" });
+
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: "Mijn wandelkaart" });
+        return;
+      } catch (shareErr) {
+        if (shareErr && shareErr.name === "AbortError") return; // gebruiker annuleerde zelf
+        // anders: val terug op downloaden hieronder
+      }
+    }
+
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "wandelkaart.png";
+    link.click();
+    URL.revokeObjectURL(url);
+    showSnapshotToast("Afbeelding gedownload.");
+  } catch (err) {
+    console.error("Snapshot mislukt:", err);
+    showSnapshotToast("Kon geen afbeelding maken van de kaart. Gebruik de schermafbeelding-functie van je apparaat.");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalLabel;
   }
 }
 
@@ -116,6 +444,44 @@ async function main() {
 
   const features = geojson.features || [];
   const layerByFeature = new Map();
+  const listItemByFeature = new Map();
+  let activeFeature = null;
+
+  function applyLayerStyle(layer, active) {
+    layer.setStyle(active ? ACTIVE_STYLE : NORMAL_STYLE);
+    const el = layer.getElement();
+    if (el) el.classList.toggle("walked-route-active", active);
+  }
+
+  // Selectie blijft staan tot een andere tocht of de kaart zelf wordt aangeklikt.
+  function selectFeature(feature, { fit = false } = {}) {
+    if (activeFeature === feature) {
+      if (fit) {
+        const layer = layerByFeature.get(feature);
+        if (layer) map.fitBounds(layer.getBounds(), { maxZoom: 13 });
+      }
+      return;
+    }
+
+    if (activeFeature) {
+      const prevLayer = layerByFeature.get(activeFeature);
+      if (prevLayer) applyLayerStyle(prevLayer, false);
+      const prevItem = listItemByFeature.get(activeFeature);
+      if (prevItem) prevItem.classList.remove("walk-item-active");
+    }
+
+    activeFeature = feature;
+
+    if (feature) {
+      const layer = layerByFeature.get(feature);
+      if (layer) {
+        applyLayerStyle(layer, true);
+        if (fit) map.fitBounds(layer.getBounds(), { maxZoom: 13 });
+      }
+      const item = listItemByFeature.get(feature);
+      if (item) item.classList.add("walk-item-active");
+    }
+  }
 
   const geoLayer = L.geoJSON(geojson, {
     style: styleForFeature,
@@ -127,15 +493,43 @@ async function main() {
         `${p.date ? new Date(p.date).toLocaleDateString("nl-NL") : ""}<br>` +
         `${fmt1.format(km(p.distance_m || 0))} km · +${fmt.format(Math.round(p.elevation_gain_m || 0))} m`
       );
+      layer.on("click", (e) => {
+        L.DomEvent.stopPropagation(e); // voorkomt dat de klik ook de kaart-klik (= deselecteren) triggert
+        selectFeature(feature, { fit: false });
+      });
     },
   }).addTo(map);
+
+  // Klikken op de lege kaart heft de selectie op — maar een klik die vlak na
+  // een zoom/pan-actie binnenkomt (bijv. via scroll-zoom) wordt genegeerd,
+  // anders verspringt de selectie al bij het scrollen/zoomen zelf.
+  let suppressNextMapClick = false;
+  map.on("zoomstart movestart", () => { suppressNextMapClick = true; });
+  map.on("zoomend moveend", () => { setTimeout(() => { suppressNextMapClick = false; }, 80); });
+  map.on("click", () => {
+    if (suppressNextMapClick) return;
+    selectFeature(null);
+  });
 
   if (features.length > 0) {
     map.fitBounds(geoLayer.getBounds(), { padding: [30, 30] });
   }
 
   renderStats(features);
-  renderList(features, map, layerByFeature);
+  renderJourney(features);
+  renderHeatmap(features);
+  renderRecords(features);
+
+  let currentSort = "date-desc";
+  renderList(features, listItemByFeature, selectFeature, currentSort, activeFeature);
+
+  const sortSelect = document.getElementById("sort-select");
+  sortSelect.addEventListener("change", (e) => {
+    currentSort = e.target.value;
+    renderList(features, listItemByFeature, selectFeature, currentSort, activeFeature);
+  });
+
+  document.getElementById("snapshot-btn").addEventListener("click", shareMapSnapshot);
 
   if (geojson.generated_at) {
     document.getElementById("last-updated").textContent =
