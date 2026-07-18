@@ -216,16 +216,16 @@ main{ max-width: 1000px; margin: 0 auto; padding: 0 1.5rem; }
   position: absolute;
   top: 50%;
   left: 0%;
-  transform: translate(-50%, -62%);
-  font-size: 1.3rem;
+  transform: translate(-50%, -58%);
+  font-size: 2.2rem;
   line-height: 1;
   transition: left 0.6s ease;
   animation: journey-bounce 1.6s ease-in-out infinite;
 }
 
 @keyframes journey-bounce{
-  0%, 100%{ transform: translate(-50%, -62%); }
-  50%{ transform: translate(-50%, -82%); }
+  0%, 100%{ transform: translate(-50%, -58%); }
+  50%{ transform: translate(-50%, -74%); }
 }
 
 @media (prefers-reduced-motion: reduce){
