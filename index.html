@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wandelkaart — mijn gewandelde wegen</title>
+<meta name="description" content="Een persoonlijke kaart van alle gewandelde routes, uit Strava.">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="hero">
+  <div class="contour-field" aria-hidden="true"></div>
+  <div class="hero-inner">
+    <p class="eyebrow">veldjournaal · strava</p>
+    <h1 class="hero-figure"><span id="stat-total-distance">–</span><span class="unit">km</span></h1>
+    <p class="hero-caption">gewandeld, over <span id="stat-total-walks">–</span> tochten in <span id="stat-total-countries">–</span> landen</p>
+  </div>
+</header>
+
+<main>
+  <section id="map-section">
+    <div id="map" role="application" aria-label="Kaart met gewandelde routes"></div>
+    <div class="legend">
+      <span class="legend-item"><i class="swatch walked"></i>bewandeld</span>
+      <span class="legend-item"><i class="swatch unwalked"></i>overige wegen &amp; paden</span>
+    </div>
+  </section>
+
+  <section id="stats-section">
+    <h2 class="section-title">Peilingen</h2>
+    <div class="stat-grid">
+      <div class="stat-card">
+        <span class="stat-label">Totale afstand</span>
+        <span class="stat-value mono" id="card-distance">–</span>
+        <span class="stat-sub">kilometer</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Totale stijging</span>
+        <span class="stat-value mono" id="card-elevation">–</span>
+        <span class="stat-sub">hoogtemeters</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Aantal tochten</span>
+        <span class="stat-value mono" id="card-count">–</span>
+        <span class="stat-sub">wandelingen</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Langste tocht</span>
+        <span class="stat-value mono" id="card-longest">–</span>
+        <span class="stat-sub" id="card-longest-name">–</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Landen bezocht</span>
+        <span class="stat-value mono" id="card-countries">–</span>
+        <span class="stat-sub" id="card-countries-list">–</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Dit jaar</span>
+        <span class="stat-value mono" id="card-year">–</span>
+        <span class="stat-sub">kilometer in <span id="card-year-label"></span></span>
+      </div>
+    </div>
+  </section>
+
+  <section id="log-section">
+    <h2 class="section-title">Logboek</h2>
+    <ol id="walk-list" class="walk-list"></ol>
+  </section>
+</main>
+
+<footer>
+  <p>Automatisch bijgewerkt via GitHub Actions · data uit Strava · <span id="last-updated"></span></p>
+</footer>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>
