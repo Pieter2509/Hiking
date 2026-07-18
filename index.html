@@ -8,17 +8,19 @@
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
 
 <header class="hero">
-  <div class="contour-field" aria-hidden="true"></div>
+  <div class="hero-grid" aria-hidden="true"></div>
+  <div class="hero-glow" aria-hidden="true"></div>
   <div class="hero-inner">
-    <p class="eyebrow">veldjournaal · strava</p>
+    <p class="eyebrow">strava · live data</p>
     <h1 class="hero-figure"><span id="stat-total-distance">–</span><span class="unit">km</span></h1>
     <p class="hero-caption">gewandeld, over <span id="stat-total-walks">–</span> tochten in <span id="stat-total-countries">–</span> landen</p>
   </div>
@@ -31,6 +33,8 @@
       <span class="legend-item"><i class="swatch walked"></i>bewandeld</span>
       <span class="legend-item"><i class="swatch unwalked"></i>overige wegen &amp; paden</span>
     </div>
+    <button id="snapshot-btn" class="snapshot-btn" type="button">📷 Deel kaart</button>
+    <div id="snapshot-toast" class="snapshot-toast" role="status" aria-live="polite"></div>
   </section>
 
   <section id="stats-section">
@@ -57,6 +61,11 @@
         <span class="stat-sub" id="card-longest-name">–</span>
       </div>
       <div class="stat-card">
+        <span class="stat-label">Meeste km's op één dag</span>
+        <span class="stat-value mono" id="card-daymax">–</span>
+        <span class="stat-sub" id="card-daymax-date">–</span>
+      </div>
+      <div class="stat-card">
         <span class="stat-label">Landen bezocht</span>
         <span class="stat-value mono" id="card-countries">–</span>
         <span class="stat-sub" id="card-countries-list">–</span>
@@ -66,11 +75,71 @@
         <span class="stat-value mono" id="card-year">–</span>
         <span class="stat-sub">kilometer in <span id="card-year-label"></span></span>
       </div>
+      <div class="stat-card">
+        <span class="stat-label">Gemiddelde snelheid</span>
+        <span class="stat-value mono" id="card-speed-avg">–</span>
+        <span class="stat-sub">km/u</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Snelste tocht</span>
+        <span class="stat-value mono" id="card-speed-max">–</span>
+        <span class="stat-sub" id="card-speed-max-name">–</span>
+      </div>
     </div>
   </section>
 
+  <section id="journey-section">
+    <h2 class="section-title">Virtuele tocht</h2>
+    <div class="journey">
+      <div class="journey-labels">
+        <span class="journey-start">–</span>
+        <span class="journey-end">–</span>
+      </div>
+      <div class="journey-track">
+        <div class="journey-fill" id="journey-fill"></div>
+        <div class="journey-walker" id="journey-walker" aria-hidden="true">🚶</div>
+      </div>
+      <p class="journey-caption" id="journey-caption">–</p>
+    </div>
+  </section>
+
+  <section id="heatmap-section">
+    <h2 class="section-title">Kalenderoverzicht</h2>
+    <div class="heatmap-scroll">
+      <div id="heatmap-months" class="heatmap-months"></div>
+      <div id="heatmap-grid" class="heatmap-grid"></div>
+    </div>
+    <div class="heatmap-legend">
+      <span>minder</span>
+      <i class="heat-swatch level-0"></i>
+      <i class="heat-swatch level-1"></i>
+      <i class="heat-swatch level-2"></i>
+      <i class="heat-swatch level-3"></i>
+      <i class="heat-swatch level-4"></i>
+      <span>meer</span>
+    </div>
+  </section>
+
+  <section id="records-section">
+    <h2 class="section-title">Persoonlijke records</h2>
+    <ol id="records-list" class="records-list"></ol>
+  </section>
+
   <section id="log-section">
-    <h2 class="section-title">Logboek</h2>
+    <div class="log-header">
+      <h2 class="section-title">Logboek</h2>
+      <div class="log-toolbar">
+        <label for="sort-select">Sorteren op</label>
+        <select id="sort-select">
+          <option value="date-desc">Datum · nieuw → oud</option>
+          <option value="date-asc">Datum · oud → nieuw</option>
+          <option value="distance-desc">Afstand · hoog → laag</option>
+          <option value="distance-asc">Afstand · laag → hoog</option>
+          <option value="elevation-desc">Stijging · hoog → laag</option>
+          <option value="elevation-asc">Stijging · laag → hoog</option>
+        </select>
+      </div>
+    </div>
     <ol id="walk-list" class="walk-list"></ol>
   </section>
 </main>
