@@ -12,6 +12,51 @@ const ICON_ELEVATION =
 const NORMAL_STYLE = { color: "#FFC736", weight: 3.5 };
 const ACTIVE_STYLE = { color: "#3ddc59", weight: 6 };
 
+// Pas deze twee punten aan om een andere virtuele tocht te tekenen.
+const JOURNEY = {
+  startName: "Stein, Limburg",
+  startLat: 50.9667,
+  startLon: 5.7667,
+  endName: "Boedapest, Hongarije",
+  endLat: 47.4979,
+  endLon: 19.0402,
+};
+
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  const c = 2 * Math.asin(Math.min(1, Math.sqrt(a)));
+  return R * c;
+}
+
+function renderJourney(features) {
+  const journeyKm = haversineKm(JOURNEY.startLat, JOURNEY.startLon, JOURNEY.endLat, JOURNEY.endLon);
+  const totalKm = features.reduce((s, f) => s + (f.properties.distance_m || 0), 0) / 1000;
+
+  const laps = Math.floor(totalKm / journeyKm);
+  const remainderKm = totalKm - laps * journeyKm;
+  const percent = journeyKm > 0 ? Math.min(100, (remainderKm / journeyKm) * 100) : 0;
+  const toGoKm = Math.max(0, journeyKm - remainderKm);
+
+  document.getElementById("journey-fill").style.width = `${percent}%`;
+  document.getElementById("journey-walker").style.left = `${percent}%`;
+  document.querySelector(".journey-start").textContent = JOURNEY.startName;
+  document.querySelector(".journey-end").textContent = JOURNEY.endName;
+
+  const lapsText = laps > 0
+    ? `Je hebt deze route al <strong>${laps}×</strong> volgelopen, en zit nu op `
+    : "Je zit op ";
+
+  document.getElementById("journey-caption").innerHTML =
+    `${lapsText}<strong>${fmt1.format(remainderKm)} km</strong> van de ${fmt1.format(journeyKm)} km ` +
+    `tussen ${JOURNEY.startName} en ${JOURNEY.endName} — nog <strong>${fmt1.format(toGoKm)} km</strong> te gaan.`;
+}
+
 function km(meters) { return meters / 1000; }
 
 function initMap() {
@@ -207,6 +252,7 @@ async function main() {
   }
 
   renderStats(features);
+  renderJourney(features);
 
   let currentSort = "date-desc";
   renderList(features, listItemByFeature, selectFeature, currentSort, activeFeature);
