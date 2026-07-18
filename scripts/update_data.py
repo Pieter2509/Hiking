@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
 Haalt wandelingen op uit Strava en schrijft ze naar data/activities.geojson
-voor de website. Komoot-tochten hoeven niet apart verwerkt te worden: die
-worden automatisch naar Strava geüpload en komen dus al mee via de API.
+voor de website.
 
 Benodigde environment variables (als GitHub Secrets):
   STRAVA_CLIENT_ID
@@ -126,7 +125,7 @@ def strava_activity_to_feature(activity, geocode_cache):
         "properties": {
             "id": f"strava-{activity['id']}",
             "name": activity.get("name"),
-            "date": activity.get("start_date"),
+            "date": activity.get("start_date_local") or activity.get("start_date"),
             "distance_m": activity.get("distance"),
             "elevation_gain_m": activity.get("total_elevation_gain"),
             "moving_time_s": activity.get("moving_time"),
