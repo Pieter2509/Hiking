@@ -6,7 +6,7 @@ const fmt1 = new Intl.NumberFormat("nl-NL", { maximumFractionDigits: 1, minimumF
 function km(meters) { return meters / 1000; }
 
 function initMap() {
-  const map = L.map("map", { scrollWheelZoom: false, worldCopyJump: true }).setView([20, 10], 2);
+  const map = L.map("map", { scrollWheelZoom: true, worldCopyJump: true }).setView([20, 10], 2);
   L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
     attribution: '&copy; OpenStreetMap &copy; CARTO',
     maxZoom: 19,
@@ -89,8 +89,13 @@ function renderList(features, map, layerByFeature) {
       const layer = layerByFeature.get(f);
       if (layer) {
         map.fitBounds(layer.getBounds(), { maxZoom: 13 });
-        layer.setStyle({ weight: 7 });
-        setTimeout(() => layer.setStyle({ weight: 3.5 }), 1200);
+        const el = layer.getElement();
+        layer.setStyle({ color: "#3ddc59", weight: 6 });
+        if (el) el.classList.add("walked-route-active");
+        setTimeout(() => {
+          layer.setStyle({ color: "#FFC736", weight: 3.5 });
+          if (el) el.classList.remove("walked-route-active");
+        }, 1400);
       }
     };
 

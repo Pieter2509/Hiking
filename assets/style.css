@@ -105,6 +105,13 @@ body{
     drop-shadow(0 0 6px rgba(255, 199, 54, 0.45));
 }
 
+/* Tijdelijke groene gloed als een route via het logboek wordt aangeklikt */
+.leaflet-interactive.walked-route-active{
+  filter:
+    drop-shadow(0 0 3px rgba(61, 220, 89, 0.95))
+    drop-shadow(0 0 7px rgba(61, 220, 89, 0.55));
+}
+
 .legend{
   position: absolute;
   bottom: 1rem;
