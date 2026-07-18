@@ -183,6 +183,52 @@ main{ max-width: 1000px; margin: 0 auto; padding: 0 1.5rem; }
   border-left: 3px solid var(--accent);
 }
 
+.log-header{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 3.5rem 0 1.4rem;
+}
+
+.log-header .section-title{ margin: 0; }
+
+.log-toolbar{
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.log-toolbar label{
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+}
+
+.log-toolbar select{
+  appearance: none;
+  background: var(--bg-elevated);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.45rem 2rem 0.45rem 0.8rem;
+  font-family: var(--body);
+  font-size: 0.85rem;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%239AA0A6' stroke-width='2'><path d='M6 9l6 6 6-6'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 0.6rem center;
+  transition: border-color 0.15s ease;
+}
+
+.log-toolbar select:hover, .log-toolbar select:focus-visible{
+  border-color: var(--accent-line);
+  outline: none;
+}
+
 /* ---------- Stat cards ---------- */
 .stat-grid{
   display: grid;
@@ -235,14 +281,15 @@ main{ max-width: 1000px; margin: 0 auto; padding: 0 1.5rem; }
 
 .walk-item{
   display: grid;
-  grid-template-columns: 6.5rem 1fr auto;
+  grid-template-columns: 3.5rem 1fr auto;
   align-items: center;
-  gap: 1rem;
-  padding: 1rem 1.1rem;
+  gap: 1.1rem;
+  padding: 0.9rem 1.1rem;
   border-bottom: 1px solid var(--border);
+  border-left: 3px solid transparent;
   cursor: pointer;
   background: var(--bg-elevated);
-  transition: background 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
 
 .walk-item:last-child{ border-bottom: none; }
@@ -252,12 +299,73 @@ main{ max-width: 1000px; margin: 0 auto; padding: 0 1.5rem; }
   outline: none;
 }
 
-.walk-date{ font-family: var(--mono); font-size: 0.76rem; color: var(--text-faint); }
+.walk-item-active{
+  background: rgba(61, 220, 89, 0.07);
+  border-left-color: var(--green);
+}
+.walk-item-active:hover{ background: rgba(61, 220, 89, 0.1); }
 
-.walk-name{ font-weight: 500; }
-.walk-name{ color: var(--text); }
+.walk-date-badge{
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  padding: 0.35rem 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  line-height: 1.1;
+}
 
-.walk-metrics{ font-family: var(--mono); font-size: 0.8rem; text-align: right; color: var(--text-soft); white-space: nowrap; }
+.walk-date-badge .day{
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 1.05rem;
+  color: var(--text);
+}
+
+.walk-date-badge .month{
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+}
+
+.walk-main{ display: flex; flex-direction: column; gap: 0.2rem; min-width: 0; }
+
+.walk-name{
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.walk-meta{
+  font-size: 0.78rem;
+  color: var(--text-faint);
+}
+
+.walk-metrics{
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.3rem;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--text-soft);
+  white-space: nowrap;
+}
+
+.walk-metrics .metric{
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.walk-metrics .metric svg{ color: var(--accent); flex-shrink: 0; }
 
 /* ---------- Footer ---------- */
 footer{
@@ -275,6 +383,6 @@ a:focus-visible, .walk-item:focus-visible{
 }
 
 @media (max-width: 560px){
-  .walk-item{ grid-template-columns: 1fr; row-gap: 0.3rem; }
-  .walk-metrics{ text-align: left; }
+  .walk-item{ grid-template-columns: 3rem 1fr; }
+  .walk-metrics{ grid-column: 1 / -1; flex-direction: row; align-items: center; gap: 1rem; margin-top: 0.4rem; }
 }
