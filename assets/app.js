@@ -89,6 +89,22 @@ function renderStats(features) {
     if (!longest || (f.properties.distance_m || 0) > (longest.properties.distance_m || 0)) longest = f;
   }
 
+  // Meerdere tochten op dezelfde dag tellen samen (bijv. ochtend- en avondwandeling).
+  const dayTotals = new Map();
+  for (const f of features) {
+    if (!f.properties.date) continue;
+    const key = new Date(f.properties.date).toISOString().slice(0, 10);
+    dayTotals.set(key, (dayTotals.get(key) || 0) + (f.properties.distance_m || 0));
+  }
+  let bestDayKey = null;
+  let bestDayDistanceM = 0;
+  for (const [key, distanceM] of dayTotals) {
+    if (distanceM > bestDayDistanceM) {
+      bestDayDistanceM = distanceM;
+      bestDayKey = key;
+    }
+  }
+
   document.getElementById("stat-total-distance").textContent = fmt.format(Math.round(km(totalDistanceM)));
   document.getElementById("stat-total-walks").textContent = fmt.format(count);
   document.getElementById("stat-total-countries").textContent = fmt.format(countries.size);
@@ -100,6 +116,12 @@ function renderStats(features) {
   if (longest) {
     document.getElementById("card-longest").textContent = fmt1.format(km(longest.properties.distance_m)) + " km";
     document.getElementById("card-longest-name").textContent = longest.properties.name || "—";
+  }
+
+  if (bestDayKey) {
+    document.getElementById("card-daymax").textContent = fmt1.format(km(bestDayDistanceM)) + " km";
+    document.getElementById("card-daymax-date").textContent = new Date(bestDayKey + "T00:00:00Z")
+      .toLocaleDateString("nl-NL", { day: "2-digit", month: "short", year: "numeric" });
   }
 
   document.getElementById("card-countries").textContent = fmt.format(countries.size);
