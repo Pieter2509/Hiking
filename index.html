@@ -71,7 +71,20 @@
   </section>
 
   <section id="log-section">
-    <h2 class="section-title">Logboek</h2>
+    <div class="log-header">
+      <h2 class="section-title">Logboek</h2>
+      <div class="log-toolbar">
+        <label for="sort-select">Sorteren op</label>
+        <select id="sort-select">
+          <option value="date-desc">Datum · nieuw → oud</option>
+          <option value="date-asc">Datum · oud → nieuw</option>
+          <option value="distance-desc">Afstand · hoog → laag</option>
+          <option value="distance-asc">Afstand · laag → hoog</option>
+          <option value="elevation-desc">Stijging · hoog → laag</option>
+          <option value="elevation-asc">Stijging · laag → hoog</option>
+        </select>
+      </div>
+    </div>
     <ol id="walk-list" class="walk-list"></ol>
   </section>
 </main>
