@@ -598,6 +598,7 @@ async function main() {
   function applyLayerStyle(layer, active, feature) {
     const baseColor = routeColorByFeature.get(feature) || DEFAULT_ROUTE_COLOR;
     layer.setStyle(active ? ACTIVE_STYLE : { color: baseColor, weight: NORMAL_STYLE.weight });
+    if (active) layer.bringToFront(); // anders kan een overlappende route de groene highlight verbergen
     const el = layer.getElement();
     if (!el) return;
     el.classList.toggle("walked-route-active", active);
