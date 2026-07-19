@@ -254,6 +254,16 @@ const RECORD_ICONS = {
     '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',
 };
 
+// Een verbetering telt alleen als "record" als hij er genoeg uitspringt —
+// anders wordt elke vroege wandeling (zonder vergelijkingsmateriaal) al snel
+// een schijnbaar record. De allereerste wandeling zet alleen de nulmeting
+// neer en verschijnt zelf niet als record.
+const RECORD_MIN_IMPROVEMENT = {
+  distanceM: 1000, // minstens 1 km verder dan het vorige record
+  elevationM: 30,   // minstens 30 hoogtemeters meer
+  dayM: 1000,       // minstens 1 km meer op één dag
+};
+
 function computeRecordsTimeline(features) {
   const sorted = [...features]
     .filter((f) => f.properties.date)
@@ -274,28 +284,37 @@ function computeRecordsTimeline(features) {
     dayTotals.set(dayKey, newDayTotalM);
 
     if (distanceM > bestDistanceM) {
+      const isBaseline = bestDistanceM === 0;
+      if (!isBaseline && distanceM - bestDistanceM >= RECORD_MIN_IMPROVEMENT.distanceM) {
+        records.push({
+          date: p.date,
+          type: "distance",
+          text: `Langste wandeling: <strong>${fmt1.format(km(distanceM))} km</strong>${p.name ? ` — ${p.name}` : ""}`,
+        });
+      }
       bestDistanceM = distanceM;
-      records.push({
-        date: p.date,
-        type: "distance",
-        text: `Langste wandeling: <strong>${fmt1.format(km(distanceM))} km</strong>${p.name ? ` — ${p.name}` : ""}`,
-      });
     }
     if (elevationM > bestElevationM) {
+      const isBaseline = bestElevationM === 0;
+      if (!isBaseline && elevationM - bestElevationM >= RECORD_MIN_IMPROVEMENT.elevationM) {
+        records.push({
+          date: p.date,
+          type: "elevation",
+          text: `Meeste hoogtemeters in één tocht: <strong>${fmt.format(Math.round(elevationM))} m</strong>${p.name ? ` — ${p.name}` : ""}`,
+        });
+      }
       bestElevationM = elevationM;
-      records.push({
-        date: p.date,
-        type: "elevation",
-        text: `Meeste hoogtemeters in één tocht: <strong>${fmt.format(Math.round(elevationM))} m</strong>${p.name ? ` — ${p.name}` : ""}`,
-      });
     }
     if (newDayTotalM > bestDayM) {
+      const isBaseline = bestDayM === 0;
+      if (!isBaseline && newDayTotalM - bestDayM >= RECORD_MIN_IMPROVEMENT.dayM) {
+        records.push({
+          date: p.date,
+          type: "day",
+          text: `Meeste kilometers op één dag: <strong>${fmt1.format(km(newDayTotalM))} km</strong>`,
+        });
+      }
       bestDayM = newDayTotalM;
-      records.push({
-        date: p.date,
-        type: "day",
-        text: `Meeste kilometers op één dag: <strong>${fmt1.format(km(newDayTotalM))} km</strong>`,
-      });
     }
   }
 
