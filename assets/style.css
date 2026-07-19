@@ -133,17 +133,22 @@ body{
   bottom: 1rem;
   right: 1rem;
   z-index: 500;
+  max-width: min(70vw, 320px);
   background: rgba(19, 22, 25, 0.9);
   backdrop-filter: blur(6px);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 0.55rem 0.8rem;
   display: flex;
-  gap: 1rem;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
   font-family: var(--mono);
   font-size: 0.72rem;
   color: var(--text-soft);
 }
+
+.legend-groups{ display: contents; }
+.legend-more{ color: var(--text-faint); }
 
 .snapshot-btn{
   position: absolute;

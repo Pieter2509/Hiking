@@ -11,6 +11,73 @@ const ICON_ELEVATION =
 
 const NORMAL_STYLE = { color: "#FFC736", weight: 3.5 };
 const ACTIVE_STYLE = { color: "#3ddc59", weight: 6 };
+const DEFAULT_ROUTE_COLOR = "#FFC736";
+
+// Kleuren voor routes die je meerdere keren hebt gelopen (geel en het groen
+// van de klik-selectie blijven bewust gereserveerd, dus die staan er niet in).
+const ROUTE_GROUP_COLORS = [
+  "#4FC3F7", // lichtblauw
+  "#FF6EC7", // roze
+  "#B388FF", // paars
+  "#FFB74D", // oranje
+  "#4DD0E1", // cyaan
+  "#F06292", // rose
+  "#9575CD", // indigo
+  "#4DB6AC", // teal
+];
+
+// Twee wandelingen worden als "dezelfde route" gezien als zowel de afstand
+// als de beweegtijd dicht genoeg bij elkaar liggen. Pas deze marges aan als
+// groepen te snel of juist te traag worden samengevoegd.
+const ROUTE_MATCH = {
+  distanceRatio: 0.12,
+  distanceAbsM: 400,
+  timeRatio: 0.2,
+  timeAbsS: 8 * 60,
+};
+
+function withinTolerance(a, b, ratio, abs) {
+  const avg = (a + b) / 2;
+  return Math.abs(a - b) <= Math.max(abs, ratio * avg);
+}
+
+// Groepeert wandelingen met een vergelijkbare afstand én beweegtijd. Geeft
+// alleen groepen terug met 2 of meer wandelingen (echte herhalingen).
+function groupRepeatedRoutes(features) {
+  const groups = [];
+
+  for (const f of features) {
+    const distanceM = f.properties.distance_m;
+    const movingTimeS = f.properties.moving_time_s;
+    if (!distanceM || !movingTimeS) continue; // te weinig data om te vergelijken
+
+    const match = groups.find(
+      (g) =>
+        withinTolerance(g.distanceM, distanceM, ROUTE_MATCH.distanceRatio, ROUTE_MATCH.distanceAbsM) &&
+        withinTolerance(g.movingTimeS, movingTimeS, ROUTE_MATCH.timeRatio, ROUTE_MATCH.timeAbsS)
+    );
+
+    if (match) {
+      const n = match.members.length;
+      match.distanceM = (match.distanceM * n + distanceM) / (n + 1);
+      match.movingTimeS = (match.movingTimeS * n + movingTimeS) / (n + 1);
+      match.members.push(f);
+    } else {
+      groups.push({ distanceM, movingTimeS, members: [f] });
+    }
+  }
+
+  return groups.filter((g) => g.members.length > 1);
+}
+
+function hexToRgba(hex, alpha) {
+  const n = parseInt(hex.replace("#", ""), 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+}
+
+function routeGlowFilter(hex) {
+  return `drop-shadow(0 0 2px ${hexToRgba(hex, 0.9)}) drop-shadow(0 0 6px ${hexToRgba(hex, 0.45)})`;
+}
 
 // Pas deze twee punten aan om een andere virtuele tocht te tekenen.
 const JOURNEY = {
@@ -32,6 +99,29 @@ function haversineKm(lat1, lon1, lat2, lon2) {
     Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
   const c = 2 * Math.asin(Math.min(1, Math.sqrt(a)));
   return R * c;
+}
+
+const MAX_LEGEND_GROUPS = 5;
+
+function renderRouteLegend(groups, routeColorByGroup) {
+  const container = document.getElementById("legend-groups");
+  container.innerHTML = "";
+  if (groups.length === 0) return;
+
+  const shown = groups.slice(0, MAX_LEGEND_GROUPS);
+  for (const g of shown) {
+    const color = routeColorByGroup.get(g);
+    const item = document.createElement("span");
+    item.className = "legend-item";
+    item.innerHTML = `<i class="swatch" style="background:${color};box-shadow:0 0 4px ${hexToRgba(color, 0.8)}"></i>×${g.members.length}`;
+    container.appendChild(item);
+  }
+  if (groups.length > MAX_LEGEND_GROUPS) {
+    const more = document.createElement("span");
+    more.className = "legend-item legend-more";
+    more.textContent = `+${groups.length - MAX_LEGEND_GROUPS} meer`;
+    container.appendChild(more);
+  }
 }
 
 function renderJourney(features) {
@@ -81,9 +171,13 @@ function initMap() {
   return map;
 }
 
-// Alle bewandelde paden krijgen dezelfde "opgelicht asfalt"-stijl.
-function styleForFeature() {
-  return { ...NORMAL_STYLE, opacity: 0.95, className: "walked-route" };
+// Retourneert een stijl-functie die de kleur van elke wandeling opzoekt in
+// routeColorByFeature (herhaalde route = eigen kleur, anders standaard geel).
+function makeStyleForFeature(routeColorByFeature) {
+  return function (feature) {
+    const color = routeColorByFeature.get(feature) || DEFAULT_ROUTE_COLOR;
+    return { color, weight: NORMAL_STYLE.weight, opacity: 0.95 };
+  };
 }
 
 function renderStats(features) {
@@ -466,10 +560,29 @@ async function main() {
   const listItemByFeature = new Map();
   let activeFeature = null;
 
-  function applyLayerStyle(layer, active) {
-    layer.setStyle(active ? ACTIVE_STYLE : NORMAL_STYLE);
+  // Wandelingen met een vergelijkbare afstand én beweegtijd worden als
+  // "dezelfde route" gezien en krijgen een eigen kleur op de kaart.
+  const repeatGroups = groupRepeatedRoutes(features);
+  const routeColorByFeature = new Map();
+  const routeColorByGroup = new Map();
+  const groupByFeature = new Map();
+  repeatGroups.forEach((g, i) => {
+    const color = ROUTE_GROUP_COLORS[i % ROUTE_GROUP_COLORS.length];
+    routeColorByGroup.set(g, color);
+    for (const f of g.members) {
+      routeColorByFeature.set(f, color);
+      groupByFeature.set(f, g);
+    }
+  });
+  renderRouteLegend(repeatGroups, routeColorByGroup);
+
+  function applyLayerStyle(layer, active, feature) {
+    const baseColor = routeColorByFeature.get(feature) || DEFAULT_ROUTE_COLOR;
+    layer.setStyle(active ? ACTIVE_STYLE : { color: baseColor, weight: NORMAL_STYLE.weight });
     const el = layer.getElement();
-    if (el) el.classList.toggle("walked-route-active", active);
+    if (!el) return;
+    el.classList.toggle("walked-route-active", active);
+    el.style.filter = active ? "" : routeGlowFilter(baseColor);
   }
 
   // Selectie blijft staan tot een andere tocht of de kaart zelf wordt aangeklikt.
@@ -484,7 +597,7 @@ async function main() {
 
     if (activeFeature) {
       const prevLayer = layerByFeature.get(activeFeature);
-      if (prevLayer) applyLayerStyle(prevLayer, false);
+      if (prevLayer) applyLayerStyle(prevLayer, false, activeFeature);
       const prevItem = listItemByFeature.get(activeFeature);
       if (prevItem) prevItem.classList.remove("walk-item-active");
     }
@@ -494,7 +607,7 @@ async function main() {
     if (feature) {
       const layer = layerByFeature.get(feature);
       if (layer) {
-        applyLayerStyle(layer, true);
+        applyLayerStyle(layer, true, feature);
         if (fit) map.fitBounds(layer.getBounds(), { maxZoom: 13 });
       }
       const item = listItemByFeature.get(feature);
@@ -503,14 +616,17 @@ async function main() {
   }
 
   const geoLayer = L.geoJSON(geojson, {
-    style: styleForFeature,
+    style: makeStyleForFeature(routeColorByFeature),
     onEachFeature: (feature, layer) => {
       layerByFeature.set(feature, layer);
       const p = feature.properties;
+      const group = groupByFeature.get(feature);
+      const repeatLine = group ? `<br><em>${group.members.length}× gelopen op deze route</em>` : "";
       layer.bindPopup(
         `<strong>${p.name || "Wandeling"}</strong><br>` +
         `${p.date ? new Date(p.date).toLocaleDateString("nl-NL") : ""}<br>` +
-        `${fmt1.format(km(p.distance_m || 0))} km · +${fmt.format(Math.round(p.elevation_gain_m || 0))} m`
+        `${fmt1.format(km(p.distance_m || 0))} km · +${fmt.format(Math.round(p.elevation_gain_m || 0))} m` +
+        repeatLine
       );
       layer.on("click", (e) => {
         L.DomEvent.stopPropagation(e); // voorkomt dat de klik ook de kaart-klik (= deselecteren) triggert
@@ -518,6 +634,11 @@ async function main() {
       });
     },
   }).addTo(map);
+
+  // Glow-kleur per route toepassen nu de SVG-elementen daadwerkelijk bestaan.
+  for (const [feature, layer] of layerByFeature) {
+    applyLayerStyle(layer, false, feature);
+  }
 
   // Klikken op de lege kaart heft de selectie op — maar een klik die vlak na
   // een zoom/pan-actie binnenkomt (bijv. via scroll-zoom) wordt genegeerd,
