@@ -26,16 +26,21 @@ const ROUTE_GROUP_COLORS = [
   "#4DB6AC", // teal
 ];
 
-// Twee wandelingen worden als "dezelfde route" gezien als zowel de afstand
-// als de beweegtijd dicht genoeg bij elkaar liggen, én het begin- en eindpunt
-// op vrijwel dezelfde plek liggen (anders kunnen twee heel verschillende
-// routes die toevallig even lang duren onterecht als "dezelfde route" gelden).
+// Twee wandelingen worden als "dezelfde route" gezien als (1) afstand en
+// beweegtijd redelijk overeenkomen (snelle voorfilter) én (2) het volledige
+// pad overlapt: minstens X% van de steekproefpunten van route A ligt binnen
+// een smalle corridor van route B, en omgekeerd. Zonder die tweede check
+// zouden twee heel verschillende wandelingen die toevallig bij jou thuis
+// beginnen en eindigen (maar een andere kant op lopen) al snel als
+// "dezelfde route" gelden.
 const ROUTE_MATCH = {
-  distanceRatio: 0.12,
-  distanceAbsM: 300,
-  timeRatio: 0.2,
-  timeAbsS: 6 * 60,
-  endpointRadiusM: 200,
+  distanceRatio: 0.15,
+  distanceAbsM: 500,
+  timeRatio: 0.25,
+  timeAbsS: 10 * 60,
+  overlapSamples: 24,
+  overlapCorridorM: 45,
+  overlapThreshold: 0.85,
 };
 
 function withinTolerance(a, b, ratio, abs) {
@@ -43,46 +48,74 @@ function withinTolerance(a, b, ratio, abs) {
   return Math.abs(a - b) <= Math.max(abs, ratio * avg);
 }
 
-function getEndpoints(feature) {
-  const coords = feature.geometry && feature.geometry.coordinates;
-  if (!coords || coords.length < 2) return null;
-  const [startLon, startLat] = coords[0];
-  const [endLon, endLat] = coords[coords.length - 1];
-  return { startLat, startLon, endLat, endLon };
-}
-
 function metersBetween(lat1, lon1, lat2, lon2) {
   return haversineKm(lat1, lon1, lat2, lon2) * 1000;
 }
 
-// Groepeert wandelingen met een vergelijkbare afstand, beweegtijd én
-// begin-/eindpunt. Geeft alleen groepen terug met 2 of meer wandelingen
-// (echte herhalingen). Elke groep vergelijkt steeds met haar allereerste lid
-// (niet met een voortschrijdend gemiddelde) — anders kan een groep langzaam
-// "wegdrijven" en uiteindelijk compleet andere routes gaan samenvoegen.
+function sampleCoords(coords, numSamples) {
+  if (coords.length <= numSamples) return coords;
+  const samples = [];
+  for (let i = 0; i < numSamples; i++) {
+    const idx = Math.round((i / (numSamples - 1)) * (coords.length - 1));
+    samples.push(coords[idx]);
+  }
+  return samples;
+}
+
+function minDistanceToCoordsM(lon, lat, coords) {
+  let min = Infinity;
+  for (const [clon, clat] of coords) {
+    const d = metersBetween(lat, lon, clat, clon);
+    if (d < min) min = d;
+    if (min < 1) break; // al zo goed als identiek, geen zin om verder te zoeken
+  }
+  return min;
+}
+
+function coverageRatio(samples, coords, corridorM) {
+  let matched = 0;
+  for (const [lon, lat] of samples) {
+    if (minDistanceToCoordsM(lon, lat, coords) <= corridorM) matched++;
+  }
+  return matched / samples.length;
+}
+
+// Beide kanten op controleren: anders zou een kort stukje van een lange
+// route al als "dezelfde route" tellen.
+function isSameRoute(a, b) {
+  const forward = coverageRatio(a.samples, b.coords, ROUTE_MATCH.overlapCorridorM);
+  if (forward < ROUTE_MATCH.overlapThreshold) return false;
+  const backward = coverageRatio(b.samples, a.coords, ROUTE_MATCH.overlapCorridorM);
+  return backward >= ROUTE_MATCH.overlapThreshold;
+}
+
+// Groepeert wandelingen die daadwerkelijk hetzelfde pad volgen. Geeft alleen
+// groepen terug met 2 of meer wandelingen (echte herhalingen). Elke groep
+// vergelijkt steeds met haar allereerste lid (niet met een voortschrijdend
+// gemiddelde) — anders kan een groep langzaam "wegdrijven" en uiteindelijk
+// compleet andere routes gaan samenvoegen.
 function groupRepeatedRoutes(features) {
   const groups = [];
 
   for (const f of features) {
     const distanceM = f.properties.distance_m;
     const movingTimeS = f.properties.moving_time_s;
-    const endpoints = getEndpoints(f);
-    if (!distanceM || !movingTimeS || !endpoints) continue; // te weinig data om te vergelijken
+    const coords = f.geometry && f.geometry.coordinates;
+    if (!distanceM || !movingTimeS || !coords || coords.length < 2) continue;
+
+    const candidate = { coords, samples: sampleCoords(coords, ROUTE_MATCH.overlapSamples) };
 
     const match = groups.find((g) => {
       const distOk = withinTolerance(g.distanceM, distanceM, ROUTE_MATCH.distanceRatio, ROUTE_MATCH.distanceAbsM);
       const timeOk = withinTolerance(g.movingTimeS, movingTimeS, ROUTE_MATCH.timeRatio, ROUTE_MATCH.timeAbsS);
-      if (!distOk || !timeOk) return false;
-
-      const startDistM = metersBetween(g.endpoints.startLat, g.endpoints.startLon, endpoints.startLat, endpoints.startLon);
-      const endDistM = metersBetween(g.endpoints.endLat, g.endpoints.endLon, endpoints.endLat, endpoints.endLon);
-      return startDistM <= ROUTE_MATCH.endpointRadiusM && endDistM <= ROUTE_MATCH.endpointRadiusM;
+      if (!distOk || !timeOk) return false; // snelle voorfilter, voorkomt onnodig dure padvergelijking
+      return isSameRoute(g.reference, candidate);
     });
 
     if (match) {
       match.members.push(f);
     } else {
-      groups.push({ distanceM, movingTimeS, endpoints, members: [f] });
+      groups.push({ distanceM, movingTimeS, reference: candidate, members: [f] });
     }
   }
 
