@@ -27,13 +27,15 @@ const ROUTE_GROUP_COLORS = [
 ];
 
 // Twee wandelingen worden als "dezelfde route" gezien als zowel de afstand
-// als de beweegtijd dicht genoeg bij elkaar liggen. Pas deze marges aan als
-// groepen te snel of juist te traag worden samengevoegd.
+// als de beweegtijd dicht genoeg bij elkaar liggen, én het begin- en eindpunt
+// op vrijwel dezelfde plek liggen (anders kunnen twee heel verschillende
+// routes die toevallig even lang duren onterecht als "dezelfde route" gelden).
 const ROUTE_MATCH = {
   distanceRatio: 0.12,
-  distanceAbsM: 400,
+  distanceAbsM: 300,
   timeRatio: 0.2,
-  timeAbsS: 8 * 60,
+  timeAbsS: 6 * 60,
+  endpointRadiusM: 200,
 };
 
 function withinTolerance(a, b, ratio, abs) {
@@ -41,29 +43,46 @@ function withinTolerance(a, b, ratio, abs) {
   return Math.abs(a - b) <= Math.max(abs, ratio * avg);
 }
 
-// Groepeert wandelingen met een vergelijkbare afstand én beweegtijd. Geeft
-// alleen groepen terug met 2 of meer wandelingen (echte herhalingen).
+function getEndpoints(feature) {
+  const coords = feature.geometry && feature.geometry.coordinates;
+  if (!coords || coords.length < 2) return null;
+  const [startLon, startLat] = coords[0];
+  const [endLon, endLat] = coords[coords.length - 1];
+  return { startLat, startLon, endLat, endLon };
+}
+
+function metersBetween(lat1, lon1, lat2, lon2) {
+  return haversineKm(lat1, lon1, lat2, lon2) * 1000;
+}
+
+// Groepeert wandelingen met een vergelijkbare afstand, beweegtijd én
+// begin-/eindpunt. Geeft alleen groepen terug met 2 of meer wandelingen
+// (echte herhalingen). Elke groep vergelijkt steeds met haar allereerste lid
+// (niet met een voortschrijdend gemiddelde) — anders kan een groep langzaam
+// "wegdrijven" en uiteindelijk compleet andere routes gaan samenvoegen.
 function groupRepeatedRoutes(features) {
   const groups = [];
 
   for (const f of features) {
     const distanceM = f.properties.distance_m;
     const movingTimeS = f.properties.moving_time_s;
-    if (!distanceM || !movingTimeS) continue; // te weinig data om te vergelijken
+    const endpoints = getEndpoints(f);
+    if (!distanceM || !movingTimeS || !endpoints) continue; // te weinig data om te vergelijken
 
-    const match = groups.find(
-      (g) =>
-        withinTolerance(g.distanceM, distanceM, ROUTE_MATCH.distanceRatio, ROUTE_MATCH.distanceAbsM) &&
-        withinTolerance(g.movingTimeS, movingTimeS, ROUTE_MATCH.timeRatio, ROUTE_MATCH.timeAbsS)
-    );
+    const match = groups.find((g) => {
+      const distOk = withinTolerance(g.distanceM, distanceM, ROUTE_MATCH.distanceRatio, ROUTE_MATCH.distanceAbsM);
+      const timeOk = withinTolerance(g.movingTimeS, movingTimeS, ROUTE_MATCH.timeRatio, ROUTE_MATCH.timeAbsS);
+      if (!distOk || !timeOk) return false;
+
+      const startDistM = metersBetween(g.endpoints.startLat, g.endpoints.startLon, endpoints.startLat, endpoints.startLon);
+      const endDistM = metersBetween(g.endpoints.endLat, g.endpoints.endLon, endpoints.endLat, endpoints.endLon);
+      return startDistM <= ROUTE_MATCH.endpointRadiusM && endDistM <= ROUTE_MATCH.endpointRadiusM;
+    });
 
     if (match) {
-      const n = match.members.length;
-      match.distanceM = (match.distanceM * n + distanceM) / (n + 1);
-      match.movingTimeS = (match.movingTimeS * n + movingTimeS) / (n + 1);
       match.members.push(f);
     } else {
-      groups.push({ distanceM, movingTimeS, members: [f] });
+      groups.push({ distanceM, movingTimeS, endpoints, members: [f] });
     }
   }
 
