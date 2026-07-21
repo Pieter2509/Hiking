@@ -4,8 +4,7 @@ Een persoonlijke website die al je gewandelde routes op een kaart zet, met
 statistieken (totale afstand, hoogtemeters, aantal landen, langste tocht, ...).
 
 Alle data komt uit **Strava**, opgehaald via een GitHub Action die elke nacht
-draait. Komoot-tochten hoeven niet apart aangeleverd te worden: die worden
-automatisch naar Strava geüpload en komen dus vanzelf mee via de API.
+draait.
 
 ## 1. Repo klaarzetten
 

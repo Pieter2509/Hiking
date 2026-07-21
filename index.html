@@ -38,6 +38,16 @@
     <div id="snapshot-toast" class="snapshot-toast" role="status" aria-live="polite"></div>
   </section>
 
+  <section id="timeline-section">
+    <h2 class="section-title">Route-tijdlijn</h2>
+    <div class="timeline-controls">
+      <button id="timeline-play" class="timeline-btn" type="button">▶ Afspelen</button>
+      <button id="timeline-reset" class="timeline-btn" type="button">Toon alles</button>
+      <span id="timeline-date" class="timeline-date">nu</span>
+    </div>
+    <input type="range" id="timeline-slider" class="timeline-slider" min="0" max="0" value="0" step="1" aria-label="Toon routes tot deze datum">
+  </section>
+
   <section id="stats-section">
     <h2 class="section-title">Peilingen</h2>
     <div class="stat-grid">
@@ -130,6 +140,7 @@
     <div class="log-header">
       <h2 class="section-title">Logboek</h2>
       <div class="log-toolbar">
+        <input type="search" id="log-search" class="log-search" placeholder="Zoek op naam of land…" aria-label="Zoek in logboek">
         <label for="sort-select">Sorteren op</label>
         <select id="sort-select">
           <option value="date-desc">Datum · nieuw → oud</option>
