@@ -145,6 +145,47 @@ function routeGlowFilter(hex) {
   return `drop-shadow(0 0 2px ${hexToRgba(hex, 0.9)}) drop-shadow(0 0 6px ${hexToRgba(hex, 0.45)})`;
 }
 
+// Zet een ISO-landcode (bijv. "nl") om in een vlagemoji (🇳🇱). Werkt puur op
+// de landcode, niet op de (taalafhankelijke) naam, dus altijd betrouwbaar.
+function flagEmoji(countryCode) {
+  if (!countryCode || countryCode.length !== 2) return "";
+  const codePoints = [...countryCode.toUpperCase()].map((c) => 127397 + c.charCodeAt(0));
+  return String.fromCodePoint(...codePoints);
+}
+
+// Bouwt een klein hoogteprofiel-lijngrafiekje (SVG) voor in de kaart-popup.
+function buildElevationSparkline(profile) {
+  if (!profile || profile.length < 2) return "";
+
+  const width = 220;
+  const height = 46;
+  const pad = 2;
+  const elevations = profile.map((p) => p[1]);
+  const minE = Math.min(...elevations);
+  const maxE = Math.max(...elevations);
+  const range = Math.max(1, maxE - minE);
+  const n = profile.length;
+
+  const toXY = (i) => {
+    const x = pad + (i / (n - 1)) * (width - pad * 2);
+    const y = height - pad - ((profile[i][1] - minE) / range) * (height - pad * 2);
+    return [x, y];
+  };
+
+  const linePoints = [];
+  for (let i = 0; i < n; i++) linePoints.push(toXY(i));
+  const lineStr = linePoints.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+  const baseline = (height - pad).toFixed(1);
+  const areaPath = `M${linePoints[0][0].toFixed(1)},${baseline} L${lineStr.split(" ").join(" L")} L${linePoints[n - 1][0].toFixed(1)},${baseline} Z`;
+
+  return (
+    `<svg class="elevation-spark" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">` +
+    `<path d="${areaPath}" fill="rgba(255,199,54,0.18)" stroke="none"/>` +
+    `<polyline points="${lineStr}" fill="none" stroke="#FFC736" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>` +
+    `</svg>`
+  );
+}
+
 // Pas deze twee punten aan om een andere virtuele tocht te tekenen.
 const JOURNEY = {
   startName: "Stein, Limburg",
@@ -169,7 +210,7 @@ function haversineKm(lat1, lon1, lat2, lon2) {
 
 const MAX_LEGEND_GROUPS = 5;
 
-function renderRouteLegend(groups, routeColorByGroup) {
+function renderRouteLegend(groups, routeColorByGroup, isolatedGroup, onToggle) {
   const container = document.getElementById("legend-groups");
   container.innerHTML = "";
   if (groups.length === 0) return;
@@ -177,9 +218,13 @@ function renderRouteLegend(groups, routeColorByGroup) {
   const shown = groups.slice(0, MAX_LEGEND_GROUPS);
   for (const g of shown) {
     const color = routeColorByGroup.get(g);
-    const item = document.createElement("span");
-    item.className = "legend-item";
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "legend-item legend-item-clickable";
+    if (g === isolatedGroup) item.classList.add("legend-item-active");
     item.innerHTML = `<i class="swatch" style="background:${color};box-shadow:0 0 4px ${hexToRgba(color, 0.8)}"></i>×${g.members.length}`;
+    item.title = "Klik om alleen deze route te tonen op de kaart";
+    item.addEventListener("click", () => onToggle(g));
     container.appendChild(item);
   }
   if (groups.length > MAX_LEGEND_GROUPS) {
@@ -249,8 +294,16 @@ function makeStyleForFeature(routeColorByFeature) {
 function renderStats(features) {
   const totalDistanceM = features.reduce((s, f) => s + (f.properties.distance_m || 0), 0);
   const totalElevation = features.reduce((s, f) => s + (f.properties.elevation_gain_m || 0), 0);
-  const countries = new Set(features.map((f) => f.properties.country).filter(Boolean));
   const count = features.length;
+
+  // Uniek per landcode (met naam-fallback voor het geval de code ontbreekt).
+  const countryMap = new Map();
+  for (const f of features) {
+    const p = f.properties;
+    if (!p.country) continue;
+    const key = p.country_code || p.country;
+    if (!countryMap.has(key)) countryMap.set(key, { name: p.country, code: p.country_code });
+  }
 
   const currentYear = new Date().getFullYear();
   const thisYearDistanceM = features
@@ -294,7 +347,7 @@ function renderStats(features) {
 
   document.getElementById("stat-total-distance").textContent = fmt.format(Math.round(km(totalDistanceM)));
   document.getElementById("stat-total-walks").textContent = fmt.format(count);
-  document.getElementById("stat-total-countries").textContent = fmt.format(countries.size);
+  document.getElementById("stat-total-countries").textContent = fmt.format(countryMap.size);
 
   document.getElementById("card-distance").textContent = fmt1.format(km(totalDistanceM));
   document.getElementById("card-elevation").textContent = fmt.format(Math.round(totalElevation));
@@ -311,8 +364,9 @@ function renderStats(features) {
       .toLocaleDateString("nl-NL", { day: "2-digit", month: "short", year: "numeric" });
   }
 
-  document.getElementById("card-countries").textContent = fmt.format(countries.size);
-  document.getElementById("card-countries-list").textContent = [...countries].slice(0, 4).join(", ") || "—";
+  document.getElementById("card-countries").textContent = fmt.format(countryMap.size);
+  document.getElementById("card-countries-list").textContent =
+    [...countryMap.values()].slice(0, 4).map((c) => `${flagEmoji(c.code)} ${c.name}`.trim()).join(", ") || "—";
 
   document.getElementById("card-year").textContent = fmt1.format(km(thisYearDistanceM));
   document.getElementById("card-year-label").textContent = currentYear;
@@ -517,13 +571,27 @@ function dateValue(feature) {
   return feature.properties.date ? new Date(feature.properties.date).getTime() : 0;
 }
 
-function renderList(features, listItemByFeature, onSelect, sortKey, activeFeature) {
+function renderList(features, listItemByFeature, onSelect, sortKey, activeFeature, searchTerm) {
   const list = document.getElementById("walk-list");
   list.innerHTML = "";
   listItemByFeature.clear();
 
+  const term = (searchTerm || "").trim().toLowerCase();
+  const filtered = term
+    ? features.filter((f) => {
+        const name = (f.properties.name || "").toLowerCase();
+        const country = (f.properties.country || "").toLowerCase();
+        return name.includes(term) || country.includes(term);
+      })
+    : features;
+
   const sorter = SORTERS[sortKey] || SORTERS["date-desc"];
-  const sorted = [...features].sort(sorter);
+  const sorted = [...filtered].sort(sorter);
+
+  if (sorted.length === 0) {
+    list.innerHTML = '<li class="record-empty">Geen wandelingen gevonden voor deze zoekopdracht.</li>';
+    return;
+  }
 
   for (const f of sorted) {
     const li = document.createElement("li");
@@ -541,7 +609,7 @@ function renderList(features, listItemByFeature, onSelect, sortKey, activeFeatur
       </div>
       <div class="walk-main">
         <span class="walk-name">${f.properties.name || "Naamloze wandeling"}</span>
-        <span class="walk-meta">${f.properties.country || "onbekend land"}</span>
+        <span class="walk-meta">${flagEmoji(f.properties.country_code)} ${f.properties.country || "onbekend land"}</span>
       </div>
       <div class="walk-metrics">
         <span class="metric">${ICON_ROUTE}${fmt1.format(km(f.properties.distance_m || 0))} km</span>
@@ -625,6 +693,8 @@ async function main() {
   const layerByFeature = new Map();
   const listItemByFeature = new Map();
   let activeFeature = null;
+  let isolatedGroup = null;
+  let timelineThresholdDate = null;
 
   // Wandelingen met een vergelijkbare afstand én beweegtijd worden als
   // "dezelfde route" gezien en krijgen een eigen kleur op de kaart.
@@ -640,7 +710,34 @@ async function main() {
       groupByFeature.set(f, g);
     }
   });
-  renderRouteLegend(repeatGroups, routeColorByGroup);
+
+  // Past de zichtbaarheid van elke route aan op basis van een eventueel
+  // geïsoleerde routegroep (legenda-klik) én een eventuele tijdlijn-drempel.
+  function refreshMapVisibility() {
+    for (const [feature, layer] of layerByFeature) {
+      const el = layer.getElement();
+      if (!el) continue;
+      const passesGroup = !isolatedGroup || isolatedGroup.members.includes(feature);
+      const passesTimeline =
+        !timelineThresholdDate ||
+        (feature.properties.date && new Date(feature.properties.date) <= timelineThresholdDate);
+      el.style.opacity = passesGroup && passesTimeline ? "1" : "0.12";
+    }
+  }
+
+  function toggleIsolatedGroup(group) {
+    isolatedGroup = isolatedGroup === group ? null : group;
+    refreshMapVisibility();
+    if (isolatedGroup) {
+      for (const f of isolatedGroup.members) {
+        const layer = layerByFeature.get(f);
+        if (layer) layer.bringToFront();
+      }
+    }
+    renderRouteLegend(repeatGroups, routeColorByGroup, isolatedGroup, toggleIsolatedGroup);
+  }
+
+  renderRouteLegend(repeatGroups, routeColorByGroup, isolatedGroup, toggleIsolatedGroup);
 
   function applyLayerStyle(layer, active, feature) {
     const baseColor = routeColorByFeature.get(feature) || DEFAULT_ROUTE_COLOR;
@@ -689,11 +786,12 @@ async function main() {
       const p = feature.properties;
       const group = groupByFeature.get(feature);
       const repeatLine = group ? `<br><em>${group.members.length}× gelopen op deze route</em>` : "";
+      const sparkline = p.elevation_profile ? `<div class="popup-elevation">${buildElevationSparkline(p.elevation_profile)}</div>` : "";
       layer.bindPopup(
         `<strong>${p.name || "Wandeling"}</strong><br>` +
         `${p.date ? new Date(p.date).toLocaleDateString("nl-NL") : ""}<br>` +
         `${fmt1.format(km(p.distance_m || 0))} km · +${fmt.format(Math.round(p.elevation_gain_m || 0))} m` +
-        repeatLine
+        repeatLine + sparkline
       );
       layer.on("click", (e) => {
         L.DomEvent.stopPropagation(e); // voorkomt dat de klik ook de kaart-klik (= deselecteren) triggert
@@ -716,6 +814,7 @@ async function main() {
   map.on("click", () => {
     if (suppressNextMapClick) return;
     selectFeature(null);
+    if (isolatedGroup) toggleIsolatedGroup(isolatedGroup);
   });
 
   if (features.length > 0) {
@@ -728,15 +827,88 @@ async function main() {
   renderRecords(features);
 
   let currentSort = "date-desc";
-  renderList(features, listItemByFeature, selectFeature, currentSort, activeFeature);
+  let currentSearch = "";
+  renderList(features, listItemByFeature, selectFeature, currentSort, activeFeature, currentSearch);
 
   const sortSelect = document.getElementById("sort-select");
   sortSelect.addEventListener("change", (e) => {
     currentSort = e.target.value;
-    renderList(features, listItemByFeature, selectFeature, currentSort, activeFeature);
+    renderList(features, listItemByFeature, selectFeature, currentSort, activeFeature, currentSearch);
   });
 
+  const searchInput = document.getElementById("log-search");
+  if (searchInput) {
+    searchInput.addEventListener("input", (e) => {
+      currentSearch = e.target.value;
+      renderList(features, listItemByFeature, selectFeature, currentSort, activeFeature, currentSearch);
+    });
+  }
+
   document.getElementById("snapshot-btn").addEventListener("click", shareMapSnapshot);
+
+  // Route-reveal tijdlijn: laat zien hoe de kaart zich in de tijd heeft opgebouwd.
+  const timelineDates = [...new Set(features.map((f) => f.properties.date).filter(Boolean))].sort(
+    (a, b) => new Date(a) - new Date(b)
+  );
+  const timelineSection = document.getElementById("timeline-section");
+  if (timelineDates.length > 1 && timelineSection) {
+    const slider = document.getElementById("timeline-slider");
+    const dateLabel = document.getElementById("timeline-date");
+    const playBtn = document.getElementById("timeline-play");
+    const resetBtn = document.getElementById("timeline-reset");
+    const lastIdx = timelineDates.length - 1;
+
+    slider.max = String(lastIdx);
+    slider.value = String(lastIdx);
+    dateLabel.textContent = "nu";
+
+    const applyTimelineIndex = (idx) => {
+      if (idx >= lastIdx) {
+        timelineThresholdDate = null;
+        dateLabel.textContent = "nu";
+      } else {
+        timelineThresholdDate = new Date(timelineDates[idx]);
+        dateLabel.textContent = timelineThresholdDate.toLocaleDateString("nl-NL", {
+          day: "2-digit", month: "short", year: "numeric",
+        });
+      }
+      refreshMapVisibility();
+    };
+
+    slider.addEventListener("input", () => applyTimelineIndex(Number(slider.value)));
+
+    resetBtn.addEventListener("click", () => {
+      slider.value = String(lastIdx);
+      applyTimelineIndex(lastIdx);
+    });
+
+    let playTimer = null;
+    playBtn.addEventListener("click", () => {
+      if (playTimer) {
+        clearInterval(playTimer);
+        playTimer = null;
+        playBtn.textContent = "▶ Afspelen";
+        return;
+      }
+      slider.value = "0";
+      applyTimelineIndex(0);
+      playBtn.textContent = "⏸ Stop";
+      const stepMs = Math.max(30, Math.min(220, 6000 / timelineDates.length));
+      playTimer = setInterval(() => {
+        const nextIdx = Number(slider.value) + 1;
+        if (nextIdx > lastIdx) {
+          clearInterval(playTimer);
+          playTimer = null;
+          playBtn.textContent = "▶ Afspelen";
+          return;
+        }
+        slider.value = String(nextIdx);
+        applyTimelineIndex(nextIdx);
+      }, stepMs);
+    });
+  } else if (timelineSection) {
+    timelineSection.style.display = "none";
+  }
 
   if (geojson.generated_at) {
     document.getElementById("last-updated").textContent =
