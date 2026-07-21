@@ -1,5 +1,19 @@
 const DATA_URL = "data/activities.geojson";
 
+// Pas dit aan als je repo ergens anders staat — wordt gebruikt voor de
+// "Ververs data nu"-knop, die naar de Actions-pagina van deze workflow linkt.
+const GITHUB_REPO = {
+  owner: "Pieter2509",
+  repo: "Hiking",
+  workflowFile: "update-data.yml",
+};
+
+const refreshLink = document.getElementById("refresh-link");
+if (refreshLink) {
+  refreshLink.href =
+    `https://github.com/${GITHUB_REPO.owner}/${GITHUB_REPO.repo}/actions/workflows/${GITHUB_REPO.workflowFile}`;
+}
+
 const fmt = new Intl.NumberFormat("nl-NL");
 const fmt1 = new Intl.NumberFormat("nl-NL", { maximumFractionDigits: 1, minimumFractionDigits: 1 });
 

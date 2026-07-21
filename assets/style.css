@@ -610,6 +610,23 @@ footer{
   font-family: var(--mono);
 }
 
+.refresh-link{
+  display: inline-block;
+  margin-top: 0.9rem;
+  color: var(--text-soft);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.45rem 0.9rem;
+  text-decoration: none;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.refresh-link:hover, .refresh-link:focus-visible{
+  border-color: var(--accent-line);
+  color: var(--text);
+}
+
 /* ---------- Focus ---------- */
 a:focus-visible, .walk-item:focus-visible{
   outline: 2px solid var(--accent);
