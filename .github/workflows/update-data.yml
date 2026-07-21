@@ -31,7 +31,7 @@ jobs:
       - name: Installeer dependencies
         run: pip install -r scripts/requirements.txt
 
-      - name: Haal Strava-data op
+      - name: Haal Strava- en Komoot-data op
         env:
           STRAVA_CLIENT_ID: ${{ secrets.STRAVA_CLIENT_ID }}
           STRAVA_CLIENT_SECRET: ${{ secrets.STRAVA_CLIENT_SECRET }}
