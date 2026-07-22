@@ -15,7 +15,7 @@ const GITHUB_REPO = {
 // iemand hiermee kan is deze ene workflow nog eens starten.
 const REFRESH_CONFIG = {
   workerUrl: "https://hiking.pieterhollanders2509.workers.dev",
-  triggerSecret: "test",
+  triggerSecret: "VUL-HIER-JE-EIGEN-TRIGGER-WOORD-IN",
 };
 
 const fallbackLink = document.getElementById("refresh-fallback-link");
@@ -623,7 +623,9 @@ function dateValue(feature) {
   return feature.properties.date ? new Date(feature.properties.date).getTime() : 0;
 }
 
-function renderList(features, listItemByFeature, onSelect, sortKey, activeFeature, searchTerm) {
+const WALK_LIST_PAGE_SIZE = 8;
+
+function renderList(features, listItemByFeature, onSelect, sortKey, activeFeature, searchTerm, visibleCount, onShowMore) {
   const list = document.getElementById("walk-list");
   list.innerHTML = "";
   listItemByFeature.clear();
@@ -642,10 +644,14 @@ function renderList(features, listItemByFeature, onSelect, sortKey, activeFeatur
 
   if (sorted.length === 0) {
     list.innerHTML = '<li class="record-empty">Geen wandelingen gevonden voor deze zoekopdracht.</li>';
+    const controls = document.getElementById("walk-list-controls");
+    if (controls) controls.innerHTML = "";
     return;
   }
 
-  for (const f of sorted) {
+  const toRender = sorted.slice(0, visibleCount);
+
+  for (const f of toRender) {
     const li = document.createElement("li");
     li.className = "walk-item";
     li.tabIndex = 0;
@@ -677,6 +683,27 @@ function renderList(features, listItemByFeature, onSelect, sortKey, activeFeatur
     li.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); activate(); } });
 
     list.appendChild(li);
+  }
+
+  const controls = document.getElementById("walk-list-controls");
+  if (controls) {
+    controls.innerHTML = "";
+    if (sorted.length > visibleCount) {
+      const remaining = sorted.length - visibleCount;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "log-more-btn";
+      btn.textContent = `Toon meer (nog ${remaining})`;
+      btn.addEventListener("click", () => onShowMore(false));
+      controls.appendChild(btn);
+    } else if (visibleCount > WALK_LIST_PAGE_SIZE) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "log-more-btn log-less-btn";
+      btn.textContent = "Toon minder";
+      btn.addEventListener("click", () => onShowMore(true));
+      controls.appendChild(btn);
+    }
   }
 }
 
@@ -886,19 +913,32 @@ async function main() {
 
   let currentSort = "date-desc";
   let currentSearch = "";
-  renderList(features, listItemByFeature, selectFeature, currentSort, activeFeature, currentSearch);
+  let visibleCount = WALK_LIST_PAGE_SIZE;
+
+  function rerenderList() {
+    renderList(features, listItemByFeature, selectFeature, currentSort, activeFeature, currentSearch, visibleCount, handleShowMore);
+  }
+
+  function handleShowMore(reset) {
+    visibleCount = reset ? WALK_LIST_PAGE_SIZE : visibleCount + WALK_LIST_PAGE_SIZE;
+    rerenderList();
+  }
+
+  rerenderList();
 
   const sortSelect = document.getElementById("sort-select");
   sortSelect.addEventListener("change", (e) => {
     currentSort = e.target.value;
-    renderList(features, listItemByFeature, selectFeature, currentSort, activeFeature, currentSearch);
+    visibleCount = WALK_LIST_PAGE_SIZE;
+    rerenderList();
   });
 
   const searchInput = document.getElementById("log-search");
   if (searchInput) {
     searchInput.addEventListener("input", (e) => {
       currentSearch = e.target.value;
-      renderList(features, listItemByFeature, selectFeature, currentSort, activeFeature, currentSearch);
+      visibleCount = WALK_LIST_PAGE_SIZE;
+      rerenderList();
     });
   }
 

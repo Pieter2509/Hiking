@@ -414,6 +414,30 @@ main{ max-width: 1000px; margin: 0 auto; padding: 0 1.5rem; }
   font-size: 0.85rem;
 }
 
+.walk-list-controls{
+  display: flex;
+  justify-content: center;
+  margin: 1rem 0 3.5rem;
+}
+
+.log-more-btn{
+  background: var(--bg-elevated);
+  color: var(--text-soft);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.55rem 1.2rem;
+  font-family: var(--body);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+.log-more-btn:hover, .log-more-btn:focus-visible{
+  border-color: var(--accent-line);
+  color: var(--text);
+  outline: none;
+}
+.log-less-btn{ color: var(--text-faint); }
+
 @media (max-width: 560px){
   .record-item{ flex-wrap: wrap; }
   .record-date{ width: 100%; order: 3; }
@@ -522,7 +546,7 @@ main{ max-width: 1000px; margin: 0 auto; padding: 0 1.5rem; }
 /* ---------- Walk list ---------- */
 .walk-list{
   list-style: none;
-  margin: 0 0 3.5rem;
+  margin: 0;
   padding: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius);
