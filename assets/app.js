@@ -15,7 +15,7 @@ const GITHUB_REPO = {
 // iemand hiermee kan is deze ene workflow nog eens starten.
 const REFRESH_CONFIG = {
   workerUrl: "https://hiking.pieterhollanders2509.workers.dev",
-  triggerSecret: "Hiking-Pieter-25092000",
+  triggerSecret: "test",
 };
 
 const fallbackLink = document.getElementById("refresh-fallback-link");
