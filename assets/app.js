@@ -1,18 +1,67 @@
 const DATA_URL = "data/activities.geojson";
 
-// Pas dit aan als je repo ergens anders staat — wordt gebruikt voor de
-// "Ververs data nu"-knop, die naar de Actions-pagina van deze workflow linkt.
+// Pas dit aan als je repo ergens anders staat — de fallback-link gebruikt dit
+// als de 1-klik-trigger hieronder onverhoopt niet werkt.
 const GITHUB_REPO = {
   owner: "Pieter2509",
   repo: "Hiking",
   workflowFile: "update-data.yml",
 };
 
-const refreshLink = document.getElementById("refresh-link");
-if (refreshLink) {
-  refreshLink.href =
+// Instellingen voor de 1-klik "Ververs data nu"-knop. workerUrl is de
+// gratis Cloudflare Worker die het GitHub-token veilig achter de hand houdt
+// (zie cloudflare-worker/worker.js en README.md). triggerSecret is een
+// simpel wachtwoordje — dit MAG in de broncode staan, want het enige wat
+// iemand hiermee kan is deze ene workflow nog eens starten.
+const REFRESH_CONFIG = {
+  workerUrl: "https://wandelkaart-refresh.JOUW-SUBDOMEIN.workers.dev",
+  triggerSecret: "VUL-HIER-JE-EIGEN-TRIGGER-WOORD-IN",
+};
+
+const fallbackLink = document.getElementById("refresh-fallback-link");
+if (fallbackLink) {
+  fallbackLink.href =
     `https://github.com/${GITHUB_REPO.owner}/${GITHUB_REPO.repo}/actions/workflows/${GITHUB_REPO.workflowFile}`;
 }
+
+async function triggerRefresh() {
+  const btn = document.getElementById("refresh-btn");
+  const status = document.getElementById("refresh-status");
+  if (!btn || !status) return;
+
+  const originalLabel = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Bezig…";
+  status.textContent = "";
+  status.className = "refresh-status";
+
+  try {
+    const res = await fetch(REFRESH_CONFIG.workerUrl, {
+      method: "POST",
+      headers: { "X-Trigger-Secret": REFRESH_CONFIG.triggerSecret },
+    });
+    const data = await res.json().catch(() => ({}));
+
+    if (res.ok && data.ok) {
+      status.textContent = "Gestart! Ververs deze pagina over ongeveer een minuut voor de nieuwe data.";
+      status.classList.add("refresh-status-ok");
+    } else {
+      console.error("Refresh-trigger mislukt:", data);
+      status.textContent = "Kon de workflow niet automatisch starten — gebruik de link hieronder.";
+      status.classList.add("refresh-status-error");
+    }
+  } catch (err) {
+    console.error("Refresh-trigger mislukt:", err);
+    status.textContent = "Kon de workflow niet automatisch starten — gebruik de link hieronder.";
+    status.classList.add("refresh-status-error");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalLabel;
+  }
+}
+
+const refreshBtn = document.getElementById("refresh-btn");
+if (refreshBtn) refreshBtn.addEventListener("click", triggerRefresh);
 
 const fmt = new Intl.NumberFormat("nl-NL");
 const fmt1 = new Intl.NumberFormat("nl-NL", { maximumFractionDigits: 1, minimumFractionDigits: 1 });
@@ -210,12 +259,12 @@ function haversineKm(lat1, lon1, lat2, lon2) {
 
 const MAX_LEGEND_GROUPS = 5;
 
-function renderRouteLegend(groups, routeColorByGroup, isolatedGroup, onToggle) {
+function renderRouteLegend(groups, routeColorByGroup, isolatedGroup, onToggle, expanded, onToggleExpand) {
   const container = document.getElementById("legend-groups");
   container.innerHTML = "";
   if (groups.length === 0) return;
 
-  const shown = groups.slice(0, MAX_LEGEND_GROUPS);
+  const shown = expanded ? groups : groups.slice(0, MAX_LEGEND_GROUPS);
   for (const g of shown) {
     const color = routeColorByGroup.get(g);
     const item = document.createElement("button");
@@ -227,11 +276,14 @@ function renderRouteLegend(groups, routeColorByGroup, isolatedGroup, onToggle) {
     item.addEventListener("click", () => onToggle(g));
     container.appendChild(item);
   }
+
   if (groups.length > MAX_LEGEND_GROUPS) {
-    const more = document.createElement("span");
-    more.className = "legend-item legend-more";
-    more.textContent = `+${groups.length - MAX_LEGEND_GROUPS} meer`;
-    container.appendChild(more);
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "legend-item legend-item-clickable legend-more";
+    toggle.textContent = expanded ? "toon minder" : `+${groups.length - MAX_LEGEND_GROUPS} meer`;
+    toggle.addEventListener("click", () => onToggleExpand());
+    container.appendChild(toggle);
   }
 }
 
@@ -694,6 +746,7 @@ async function main() {
   const listItemByFeature = new Map();
   let activeFeature = null;
   let isolatedGroup = null;
+  let legendExpanded = false;
   let timelineThresholdDate = null;
 
   // Wandelingen met een vergelijkbare afstand én beweegtijd worden als
@@ -734,10 +787,15 @@ async function main() {
         if (layer) layer.bringToFront();
       }
     }
-    renderRouteLegend(repeatGroups, routeColorByGroup, isolatedGroup, toggleIsolatedGroup);
+    renderRouteLegend(repeatGroups, routeColorByGroup, isolatedGroup, toggleIsolatedGroup, legendExpanded, toggleLegendExpanded);
   }
 
-  renderRouteLegend(repeatGroups, routeColorByGroup, isolatedGroup, toggleIsolatedGroup);
+  function toggleLegendExpanded() {
+    legendExpanded = !legendExpanded;
+    renderRouteLegend(repeatGroups, routeColorByGroup, isolatedGroup, toggleIsolatedGroup, legendExpanded, toggleLegendExpanded);
+  }
+
+  renderRouteLegend(repeatGroups, routeColorByGroup, isolatedGroup, toggleIsolatedGroup, legendExpanded, toggleLegendExpanded);
 
   function applyLayerStyle(layer, active, feature) {
     const baseColor = routeColorByFeature.get(feature) || DEFAULT_ROUTE_COLOR;
