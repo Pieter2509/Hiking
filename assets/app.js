@@ -14,7 +14,7 @@ const GITHUB_REPO = {
 // simpel wachtwoordje — dit MAG in de broncode staan, want het enige wat
 // iemand hiermee kan is deze ene workflow nog eens starten.
 const REFRESH_CONFIG = {
-  workerUrl: "https://wandelkaart-refresh.JOUW-SUBDOMEIN.workers.dev",
+  workerUrl: "https://hiking.pieterhollanders2509.workers.dev",
   triggerSecret: "VUL-HIER-JE-EIGEN-TRIGGER-WOORD-IN",
 };
 
