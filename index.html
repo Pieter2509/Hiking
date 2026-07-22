@@ -158,7 +158,9 @@
 
 <footer>
   <p>Automatisch bijgewerkt via GitHub Actions · data uit Strava · <span id="last-updated"></span></p>
-  <a id="refresh-link" class="refresh-link" href="#" target="_blank" rel="noopener">🔄 Ververs data nu</a>
+  <button id="refresh-btn" class="refresh-link" type="button">🔄 Ververs data nu</button>
+  <p id="refresh-status" class="refresh-status" role="status" aria-live="polite"></p>
+  <a id="refresh-fallback-link" class="refresh-fallback" href="#" target="_blank" rel="noopener">Lukt het niet? Start de workflow handmatig via GitHub</a>
 </footer>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
