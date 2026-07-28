@@ -122,5 +122,9 @@
   "50.24,4.9": {
     "name": "België / Belgique / Belgien",
     "code": "be"
+  },
+  "50.42,2.95": {
+    "name": "France",
+    "code": "fr"
   }
 }
