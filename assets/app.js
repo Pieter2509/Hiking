@@ -15,7 +15,7 @@ const GITHUB_REPO = {
 // iemand hiermee kan is deze ene workflow nog eens starten.
 const REFRESH_CONFIG = {
   workerUrl: "https://hiking.pieterhollanders2509.workers.dev",
-  triggerSecret: "test",
+  triggerSecret: "VUL-HIER-JE-EIGEN-TRIGGER-WOORD-IN",
 };
 
 const fallbackLink = document.getElementById("refresh-fallback-link");
@@ -872,10 +872,12 @@ async function main() {
       const group = groupByFeature.get(feature);
       const repeatLine = group ? `<br><em>${group.members.length}× gelopen op deze route</em>` : "";
       const sparkline = p.elevation_profile ? `<div class="popup-elevation">${buildElevationSparkline(p.elevation_profile)}</div>` : "";
+      const speedKmh = p.distance_m && p.moving_time_s ? (p.distance_m / p.moving_time_s) * 3.6 : null;
+      const speedText = speedKmh ? ` · ${fmt1.format(speedKmh)} km/u` : "";
       layer.bindPopup(
         `<strong>${p.name || "Wandeling"}</strong><br>` +
         `${p.date ? new Date(p.date).toLocaleDateString("nl-NL") : ""}<br>` +
-        `${fmt1.format(km(p.distance_m || 0))} km · +${fmt.format(Math.round(p.elevation_gain_m || 0))} m` +
+        `${fmt1.format(km(p.distance_m || 0))} km · +${fmt.format(Math.round(p.elevation_gain_m || 0))} m` + speedText +
         repeatLine + sparkline
       );
       layer.on("click", (e) => {
