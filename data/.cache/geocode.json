@@ -130,5 +130,9 @@
   "50.38,3.25": {
     "name": "France",
     "code": "fr"
+  },
+  "45.47,9.2": {
+    "name": "Italia",
+    "code": "it"
   }
 }
