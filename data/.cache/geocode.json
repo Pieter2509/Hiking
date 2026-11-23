@@ -162,5 +162,9 @@
   "50.28,5.09": {
     "name": "België / Belgique / Belgien",
     "code": "be"
+  },
+  "50.79,5.92": {
+    "name": "Nederland",
+    "code": "nl"
   }
 }
